@@ -1,0 +1,161 @@
+<style>
+    @import url("https://fonts.xz.style/serve/inter.css");
+    @import url("https://cdn.jsdelivr.net/npm/@exampledev/new.css@1.1.2/new.min.css");
+
+    main {
+        display: flex;
+        flex-direction: column;
+    }
+
+    mark {
+        background-color: gold;
+    }
+
+    tr:hover {
+        background-color: lemonchiffon;
+    }
+</style>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QABot</title>
+</head>
+
+<body>
+    <main>
+        <div id="context-display"></div>
+        <textarea id="context-input" cols="30" rows="10" placeholder="Context"></textarea>
+        <input type="text" id="question" placeholder="Question">
+        <input type="button" id="question-submit-button" value="Submit">
+        <table id="answers-table">
+
+        </table>
+    </main>
+</body>
+
+</html>
+<script>
+    /**
+     * @typedef {object} QARequest
+     * @property {string} context
+     * @property {string} question
+     * @property {number} topk
+     * 
+     * @typedef {object} Answer
+     * @property {string} content
+     * @property {number} start
+     * @property {number} end
+     * @property {string} score
+     * 
+     * @typedef {object} QAResponse
+     * @property {string} context
+     * @property {Answer[]} answers
+     */
+
+    class Gateway {
+        /**
+         * @param {QARequest} request
+         * @returns {Promise<QAResponse>}
+         */
+        submit_question = async (request) => { }
+    }
+
+    class DummyGateway extends Gateway {
+        /**
+         * @param {QARequest} request
+         * @returns {Promise<QAResponse>}
+         */
+        submit_question = async (request) => {
+            console.table(request)
+            /**@type{QAResponse}*/
+            const response = {
+                context: "It is sunny today.",
+                answers: [
+                    { content: "is", start: 3, end: 4, score: "1.00" },
+                    { content: "sunny", start: 6, end: 10, score: "0.87" }
+                ]
+            }
+            return new Promise(resolve => resolve(response))
+        }
+    }
+
+    class ServerGateway extends Gateway {
+        /**
+         * @param {QARequest} request
+         * @returns {Promise<QAResponse>}
+         */
+        submit_question = async (request) => {
+            const req_json = JSON.stringify(request)
+            const res_raw = await fetch("http://127.0.0.1:3838", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: req_json,
+            })
+            const response = await res_raw.json()
+            return response
+        }
+    }
+
+    const $ = (id) => document.getElementById(id)
+
+    /**@type{Gateway}*/
+    const gateway = new ServerGateway()
+
+    const submit_question = async () => {
+        // Read
+        const context = $("context-input").value
+        const question = $("question").value
+
+        // Make Request
+        const request = { context, question, topk: 8 }
+
+        // Send Request
+        const response = await gateway.submit_question(request)
+
+        // Analyze Response
+        const new_context = response.context
+        const answers = response.answers
+        $("context-input").value = new_context
+
+        $("answers-table").innerHTML = ""
+        answers.forEach(answer => {
+            const $tr = document.createElement("tr")
+            const $content_col = document.createElement("td")
+            $content_col.innerText = answer.content
+            const $score_col = document.createElement("td")
+            $score_col.innerText = parseFloat(answer.score).toFixed(1)
+            $score_col.style.width = "50px"
+
+            $tr.append($content_col, $score_col)
+            $("answers-table").append($tr)
+
+            $tr.addEventListener("click", () => {
+                const $context_display = $("context-display")
+                $context_display.innerHTML =
+                    new_context.substring(0, answer.start) +
+                    "<mark>" +
+                    new_context.substring(answer.start + 1, answer.end) +
+                    "</mark>" +
+                    new_context.substring(answer.end, new_context.length)
+            })
+        })
+    }
+
+    $("question").addEventListener("keypress", (e) => {
+        const keycode = e.code || e.key
+        if (keycode == "Enter") {
+            submit_question()
+        }
+    })
+    $("question-submit-button").addEventListener("click", submit_question)
+
+    $("context-input").value = `This app is QA Bot, an AI program that extracts and answers your question. 
+To use this app, you need to launch the Server.
+This app uses Distil BERT for extractive question-answering task. 
+This model is lightweight and is not the causal model, so it can run fast on your local computer.`
+    $("question").value = "Why this app can run on my local computer?"
+</script>
